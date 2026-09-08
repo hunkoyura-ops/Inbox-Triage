@@ -1,0 +1,517 @@
+{
+  "name": "Inbox → Triage",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {
+          "labelIds": [
+            "Label_8997986563553801778"
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "1693fad5-5cf6-4381-b4b4-f28e68be6391",
+      "name": "Gmail Trigger",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "HWpQWKl6TyXBIyn6",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "YOUR_ANTHROPIC_API_KEY"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-6\",\n  \"max_tokens\": 500,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Ти класифікуєш вхідні відповіді від контент-креаторів на пропозиції про співпрацю.\\n\\nЛист від: {{ $json.From }}\\nТема: {{ $json.Subject }}\\nТекст:\\n{{ $json.snippet }}\\n\\nПоверни ТІЛЬКИ валідний JSON без markdown-обгортки, без пояснень:\\n{\\n  \\\"category\\\": одне з: interested | negotiating | declined | question | spam,\\n  \\\"priority\\\": одне з: high | medium | low,\\n  \\\"creator_name\\\": ім'я або нік креатора, якщо видно, інакше \\\"unknown\\\",\\n  \\\"summary\\\": одне речення українською, суть повідомлення,\\n  \\\"key_points\\\": масив рядків, конкретика — названі ціни, дедлайни, умови, питання\\n}\\n\\nПравила пріоритету:\\n- high: креатор готовий домовлятись, назвав ціну, або поставив питання що блокує угоду\\n- medium: цікавиться, але без конкретики\\n- low: відмова, спам, автовідповідь\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "31d15c32-b971-4ce5-82b3-b4547c993f13",
+      "name": "HTTP Request",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.content[0].text;\n\nconst cleaned = raw.replace(/```json\\n?/g, '').replace(/```/g, '').trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  parsed = {\n    category: 'question',\n    priority: 'medium',\n    creator_name: 'unknown',\n    summary: 'PARSE FAILED: ' + raw.slice(0, 200),\n    key_points: []\n  };\n}\n\nconst email = $('Gmail Trigger').first().json;\n\nconst fromRaw = email.From ?? '';\nconst fromAddress = fromRaw.match(/<(.+?)>/)?.[1] ?? fromRaw;\n\nreturn [{\n  json: {\n    ...parsed,\n    from: fromAddress,\n    subject: email.Subject ?? '',\n    body: email.snippet ?? '',\n    threadId: email.threadId ?? '',\n    date: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "9984e27b-f6ae-492d-8db8-b5c6ad2055a2",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "interested",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "8dd940ed-9c67-4220-a188-9ee281f71e0f"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "1bf8fc6b-4019-4809-acd8-21acc670a565",
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "negotiating",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "e281a986-9fea-4c74-9696-a1aa05f9e8b1",
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "question",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "28d2ca04-499d-4cff-aa04-4624da0bcd15",
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "declined",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "439853f2-6383-453d-bdbf-92ce03328662",
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "spam",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        672,
+        0
+      ],
+      "id": "1933e2b9-f4d7-45fe-81dc-9a902c0b5a77",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "YOUR_ANTHROPIC_API_KEY"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-6\",\n  \"max_tokens\": 800,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Напиши чернетку відповіді креатору англійською.\\n\\nКатегорія: {{ $json.category }}\\nІм'я креатора: {{ $json.creator_name }}\\nСуть: {{ $json.summary }}\\n\\nОригінал листа:\\n{{ $json.body }}\\n\\nПравила:\\n- Тон діловий, але не сухий\\n- Максимум 5 речень\\n- Якщо креатор назвав ціну — не погоджуйся і не торгуйся, просто підтверди що передаєш на узгодження\\n- Якщо чогось бракує для відповіді — познач це як ПОТРІБНО УТОЧНИТИ великими літерами\\n- Не вигадуй умов, бюджетів, дедлайнів яких немає в листі\\n\\nПоверни тільки текст листа, без теми і без пояснень.\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        912,
+        -16
+      ],
+      "id": "b8836b98-38cb-40f6-8307-c0f327b2d120",
+      "name": "HTTP Request1",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1nu4MypB6BEtdibWyyhOAtH4GgtxLegozsVJjcLAKzaA",
+          "mode": "list",
+          "cachedResultName": "Creators Email Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1nu4MypB6BEtdibWyyhOAtH4GgtxLegozsVJjcLAKzaA/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Лист1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1nu4MypB6BEtdibWyyhOAtH4GgtxLegozsVJjcLAKzaA/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Date": "={{ $('Code in JavaScript').first().json.date }}",
+            "From": "={{ $('Code in JavaScript').first().json.from }}",
+            "Creator": "={{ $('Code in JavaScript').first().json.creator_name }}",
+            "Category": "={{ $('Code in JavaScript').first().json.category }}",
+            "Priority": "={{ $('Code in JavaScript').first().json.priority }}",
+            "Summary": "={{ $('Code in JavaScript').first().json.summary }}",
+            "Draft": "={{ $json.content?.[0]?.text || '—' }}",
+            "Status": "pending review"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "From",
+              "displayName": "From",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Creator",
+              "displayName": "Creator",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Category",
+              "displayName": "Category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Priority",
+              "displayName": "Priority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Summary",
+              "displayName": "Summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Draft",
+              "displayName": "Draft",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1568,
+        0
+      ],
+      "id": "658664e0-7262-4b58-908e-11d6f71a55e4",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "IlQm11NwZyMywG2i",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "subject": "=Re: {{ $('Gmail Trigger').first().json.Subject }}",
+        "message": "={{ $json.content[0].text }}",
+        "options": {
+          "replyTo": "={{ $('Code in JavaScript').first().json.from }}",
+          "threadId": "={{ $('Gmail Trigger').first().json.threadId }}"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        912,
+        304
+      ],
+      "id": "63de668e-802c-45da-9dd3-e834a413256b",
+      "name": "Create a draft",
+      "webhookId": "d918ab86-a6f7-42d4-854b-05e512938476",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "HWpQWKl6TyXBIyn6",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create a draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a draft": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "31bd6c08-95c3-4a7b-86a8-afc8fb694216",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5c089ce19d8623f05c104c53aadca19e4392ee8f1fd1af795de3d6e42811ac9e"
+  },
+  "nodeGroups": [],
+  "id": "hzPQIWp2mcWItXni",
+  "tags": []
+}
