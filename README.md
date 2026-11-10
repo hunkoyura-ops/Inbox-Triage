@@ -1,63 +1,63 @@
 # Inbox → Triage
 
-Автоматизація для сортування вхідних відповідей від контент-креаторів. Зібрана в n8n.
+An automation that sorts incoming replies from content creators. Built in n8n.
 
-## Проблема
+## The problem
 
-Після аутрічу до креаторів у пошту падають десятки відповідей: хтось цікавиться, хтось торгується по ціні, хтось відмовляється, хтось пише не по темі. Розбирати їх вручну — це щодня по пів години на читання, сортування й перенесення в таблицю. Гарячі відповіді при цьому губляться серед решти.
+After creator outreach, dozens of replies land in the inbox. Some creators are interested, some negotiate the price, some decline, some write off-topic. Sorting them by hand means half an hour every day spent reading, sorting and copying into a spreadsheet. Meanwhile the hot replies get lost among the rest.
 
-## Що робить флоу
+## What the flow does
 
 ```
-Gmail (новий лист з лейблом creators)
+Gmail (new email with the "creators" label)
    ↓
-Claude API — класифікація наміру
+Claude API: intent classification
    ↓
-Switch — розгалуження за категорією
+Switch: branch by category
    ↓
-Claude API — генерація чернетки відповіді
+Claude API: draft reply generation
    ↓
-Google Sheets — лог
+Google Sheets: log
    ↓
-Gmail — чернетка в драфти
+Gmail: draft saved to Drafts
 ```
 
-Модель визначає категорію (`interested`, `negotiating`, `declined`, `question`, `spam`), пріоритет, ім'я креатора, і витягує конкретику — названі ціни, дедлайни, питання.
+The model determines the category (`interested`, `negotiating`, `declined`, `question`, `spam`), the priority and the creator's name, and extracts the specifics: quoted prices, deadlines, questions.
 
-Далі потік розгалужується: для змістовних відповідей генерується чернетка, для відмов і спаму — тільки запис у лог, без зайвого виклику до API.
+The flow then branches. Substantive replies get a draft answer. Declines and spam are only logged, with no extra API call.
 
-## Технічні рішення
+## Technical decisions
 
-**Чернетка, а не автовідправка.** Флоу готує відповідь і кладе її в драфти Gmail — рішення надіслати залишається за людиною. Автоматизувати останній крок технічно нескладно, але помилка в переписці з креатором коштує дорожче за зекономлену хвилину.
+**A draft, not an auto-send.** The flow prepares a reply and puts it in Gmail Drafts. The decision to send stays with a person. Automating the last step is technically easy, but a mistake in a conversation with a creator costs more than the minute saved.
 
-**Прямі виклики API замість готових нод.** Claude викликається через HTTP Request з повним контролем над промптом і параметрами.
+**Direct API calls instead of ready-made nodes.** Claude is called through an HTTP Request node, with full control over the prompt and parameters.
 
-**Обробка помилок замість щасливого шляху.** Відповідь моделі парситься в блоці `try/catch` з фолбеком — якщо повернеться не JSON, флоу не впаде, а запише проблему в лог. У Switch налаштований fallback-вихід на випадок несподіваної категорії.
+**Error handling, not just the happy path.** The model's response is parsed in a `try/catch` block with a fallback. If it returns something other than JSON, the flow does not crash; it writes the problem to the log. The Switch has a fallback output for an unexpected category.
 
-**Захист від галюцинацій у промпті.** Модель має пряму заборону вигадувати бюджети, дедлайни й умови, яких немає в листі. Те, чого бракує для відповіді, вона позначає як потребу уточнення, а не домислює.
+**Hallucination guard in the prompt.** The model is explicitly forbidden to invent budgets, deadlines or terms that are not in the email. Whatever is missing for a reply is marked as needing clarification instead of being made up.
 
-## Стек
+## Stack
 
 - n8n (Cloud)
 - Anthropic Claude API
 - Gmail API
 - Google Sheets API
 
-## Структура таблиці
+## Sheet structure
 
 | Date | From | Creator | Category | Priority | Summary | Draft | Status |
 |------|------|---------|----------|----------|---------|-------|--------|
 
-## Налаштування
+## Setup
 
-1. Імпортувати `inbox-triage.json` у n8n
-2. Підключити креденшели Gmail і Google Sheets через OAuth
-3. Створити Header Auth креденшел для Anthropic API (`x-api-key`)
-4. Створити лейбл `creators` у Gmail і фільтр, який його присвоює
-5. Створити таблицю з колонками зі схеми вище
+1. Import `inbox-triage.json` into n8n
+2. Connect Gmail and Google Sheets credentials through OAuth
+3. Create a Header Auth credential for the Anthropic API (`x-api-key`)
+4. Create a `creators` label in Gmail and a filter that assigns it
+5. Create a sheet with the columns from the structure above
 
-API-ключ у файлі замінений на плейсхолдер — його треба підставити свій.
+The API key in the file is replaced with a placeholder. Put in your own.
 
-## Автор
+## Author
 
-Yurii Hunko — [hunkoyura.com](https://hunkoyura.com)
+Yurii Hunko, [hunkoyura.com](https://hunkoyura.com)
